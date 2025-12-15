@@ -19,7 +19,7 @@ public class NotificationEvent {
     @Column(nullable = false)
     private String recipient;
 
-    @Column(columnDefinition = "LONGTEXT", nullable = false)
+    @Column(columnDefinition = "TEXT")
     private String message;
 
     @Column(nullable = false)
@@ -28,15 +28,15 @@ public class NotificationEvent {
     @Column(nullable = false)
     private String status;
 
-    @Column(nullable = false)
-    private Integer retryCount;
+    @Column
+    private Integer retryCount = 0;
 
-    @Column(columnDefinition = "LONGTEXT")
+    @Column
     private String failureReason;
 
-    @Column(name = "created_at", nullable = false)
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at", nullable = false)
+    @Column(nullable = false)
     private LocalDateTime updatedAt;
 }

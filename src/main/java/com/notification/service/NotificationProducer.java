@@ -38,16 +38,11 @@ public class NotificationProducer {
     // Send notification to main queue
     public void sendNotification(NotificationEvent event) {
         try {
+            String payload = "EVENT_ID=" + event.getId();
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.EXCHANGE,
                     RabbitMQConfig.ROUTING_KEY,
-                    event,
-                    message -> {
-                        MessageProperties props = message.getMessageProperties();
-                        props.setCorrelationId(String.valueOf(event.getId()));
-                        props.setHeader("eventId", event.getId());
-                        return message;
-                    }
+                    payload
             );
             log.info("✓ Notification queued successfully - Event ID: {}", event.getId());
         } catch (Exception e) {
