@@ -1,7 +1,7 @@
 package com.notification.entity;
 
-import jakarta.persistence.*;
 import lombok.*;
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
@@ -22,9 +22,10 @@ public class AuditLog {
     @Column(nullable = false)
     private String action;
 
-    @Column(columnDefinition = "LONGTEXT")
+    @Column(columnDefinition = "TEXT")
     private String details;
 
+    // CHANGE THIS: createdAt → timestamp
     @Column(nullable = false)
-    private LocalDateTime timestamp;
+    private LocalDateTime timestamp;  // ← WAS: createdAt
 }
