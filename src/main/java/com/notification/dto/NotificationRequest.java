@@ -1,6 +1,5 @@
 package com.notification.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
@@ -14,7 +13,7 @@ public class NotificationRequest {
     private String notificationType;
 
     @NotBlank(message = "Recipient is required")
-    @Email(message = "Recipient must be a valid email")
+    // REMOVE @Email – it breaks SMS
     private String recipient;
 
     @NotBlank(message = "Message is required")

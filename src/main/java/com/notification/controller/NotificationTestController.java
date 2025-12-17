@@ -2,7 +2,10 @@ package com.notification.controller;
 
 import com.notification.dto.NotificationRequest;
 import com.notification.dto.NotificationResponse;
+import com.notification.service.NotificationService;
+import com.notification.service.sender.SenderConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -144,13 +147,17 @@ public class NotificationTestController {
      * Test SMS Configuration (Validate Twilio Setup)
      * GET: http://localhost:8080/api/test/sms/config
      */
+
+    @Autowired
+    private SenderConfig  senderConfig;
+
     @GetMapping("/sms/config")
     public NotificationResponse testSmsConfig() {
         log.info("📱 Testing SMS CONFIGURATION");
         try {
-            String accountSid = System.getenv("TWILIO_ACCOUNT_SID");
-            String authToken = System.getenv("TWILIO_AUTH_TOKEN");
-            String phoneNumber = System.getenv("TWILIO_PHONE_NUMBER");
+            String accountSid = senderConfig.getTwilioAccountSid();
+            String authToken  = senderConfig.getTwilioAuthToken();
+            String phoneNumber      = senderConfig.getTwilioPhoneNumber();
 
             if (accountSid == null || authToken == null || phoneNumber == null) {
                 log.warn("⚠️ Twilio credentials not found in environment variables");

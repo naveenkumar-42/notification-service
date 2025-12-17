@@ -5,8 +5,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Configuration properties for Email and SMS senders
- * Load from application.properties or application.yml
+ * Configuration properties for Email and SMS senders.
+ * Values are loaded from application.properties with prefix: notification.sender
+ *
+ * Example:
+ * notification.sender.email.username=...
+ * notification.sender.sms.account-sid=...
  */
 @Component
 @ConfigurationProperties(prefix = "notification.sender")
@@ -47,6 +51,8 @@ public class SenderConfig {
     }
 
     // ===== CONVENIENCE GETTERS =====
+
+    // EMAIL
     public String getEmailFromAddress() {
         return email.getFromAddress();
     }
@@ -87,6 +93,7 @@ public class SenderConfig {
         return email.getConnectionTimeout();
     }
 
+    // SMS (TWILIO)
     public String getTwilioAccountSid() {
         return sms.getAccountSid();
     }
