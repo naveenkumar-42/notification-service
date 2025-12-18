@@ -7,10 +7,6 @@ import org.springframework.stereotype.Component;
 /**
  * Configuration properties for Email and SMS senders.
  * Values are loaded from application.properties with prefix: notification.sender
- *
- * Example:
- * notification.sender.email.username=...
- * notification.sender.sms.account-sid=...
  */
 @Component
 @ConfigurationProperties(prefix = "notification.sender")
@@ -23,86 +19,41 @@ public class SenderConfig {
     // ===== SMS (TWILIO) CONFIGURATION =====
     private Sms sms = new Sms();
 
-    // ===== EMAIL NESTED CLASS =====
     @Data
     public static class Email {
-        // Gmail SMTP Server Settings
         private String host = "smtp.gmail.com";
         private int port = 587;
         private String username = "";
         private String password = "";
         private String fromAddress = "";
         private String replyTo = "";
-
-        // Email properties
         private boolean tlsEnabled = true;
         private boolean authEnabled = true;
         private int timeout = 5000;
         private int connectionTimeout = 5000;
     }
 
-    // ===== SMS (TWILIO) NESTED CLASS =====
     @Data
     public static class Sms {
-        // Twilio API Credentials
         private String accountSid = "";
         private String authToken = "";
-        private String fromNumber = "";  // Your Twilio phone number
+        private String fromNumber = "";
     }
 
-    // ===== CONVENIENCE GETTERS =====
+    // EMAIL convenience getters
+    public String getEmailFromAddress() { return email.getFromAddress(); }
+    public String getEmailReplyTo() { return email.getReplyTo() != null ? email.getReplyTo() : email.getFromAddress(); }
+    public String getEmailHost() { return email.getHost(); }
+    public int getEmailPort() { return email.getPort(); }
+    public String getEmailUsername() { return email.getUsername(); }
+    public String getEmailPassword() { return email.getPassword(); }
+    public boolean isEmailTlsEnabled() { return email.isTlsEnabled(); }
+    public boolean isEmailAuthEnabled() { return email.isAuthEnabled(); }
+    public int getEmailTimeout() { return email.getTimeout(); }
+    public int getEmailConnectionTimeout() { return email.getConnectionTimeout(); }
 
-    // EMAIL
-    public String getEmailFromAddress() {
-        return email.getFromAddress();
-    }
-
-    public String getEmailReplyTo() {
-        return email.getReplyTo() != null ? email.getReplyTo() : email.getFromAddress();
-    }
-
-    public String getEmailHost() {
-        return email.getHost();
-    }
-
-    public int getEmailPort() {
-        return email.getPort();
-    }
-
-    public String getEmailUsername() {
-        return email.getUsername();
-    }
-
-    public String getEmailPassword() {
-        return email.getPassword();
-    }
-
-    public boolean isEmailTlsEnabled() {
-        return email.isTlsEnabled();
-    }
-
-    public boolean isEmailAuthEnabled() {
-        return email.isAuthEnabled();
-    }
-
-    public int getEmailTimeout() {
-        return email.getTimeout();
-    }
-
-    public int getEmailConnectionTimeout() {
-        return email.getConnectionTimeout();
-    }
-
-    // SMS (TWILIO)
-    public String getTwilioAccountSid() {
-        return sms.getAccountSid();
-    }
-
-    public String getTwilioAuthToken() {
-        return sms.getAuthToken();
-    }
-
-    public String getTwilioPhoneNumber() {
-        return sms.getFromNumber();
-    }
+    // SMS convenience getters
+    public String getTwilioAccountSid() { return sms.getAccountSid(); }
+    public String getTwilioAuthToken() { return sms.getAuthToken(); }
+    public String getTwilioPhoneNumber() { return sms.getFromNumber(); }
 }

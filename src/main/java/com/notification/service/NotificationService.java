@@ -2,12 +2,11 @@ package com.notification.service;
 
 import com.notification.dto.NotificationRequest;
 import com.notification.dto.NotificationResponse;
-import com.notification.entity.NotificationEvent;
 import com.notification.entity.AuditLog;
-import com.notification.repository.NotificationEventRepository;
+import com.notification.entity.NotificationEvent;
 import com.notification.repository.AuditLogRepository;
+import com.notification.repository.NotificationEventRepository;
 import com.notification.repository.NotificationRuleRepository;
-import com.notification.service.NotificationDeliveryService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,91 +33,88 @@ public class NotificationService {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
-    @Autowired
-    private NotificationDeliveryService deliveryService;
-
     private static final String QUEUE_NAME = "notification.queue";
 
     @Transactional
-    public NotificationResponse sendNotification(NotificationRequest request) throws Exception {
+    public NotificationResponse sendNotification(NotificationRequest request) {
         log.info("sendNotification() called - Type: {}, Recipient: {}",
                 request.getNotificationType(), request.getRecipient());
-
         try {
-            // 1. Create notification event
-            NotificationEvent event = createNotificationEvent(request);
-            eventRepository.save(event);
-            log.info(" Notification event created with ID: {}", event.getId());
-
-            // 2. Create audit log
-            createAuditLog(event, "CREATED", "Notification created");
-
-            // 3. Publish to RabbitMQ for async processing
-            publishToQueue(event);
-            log.info(" Event published to queue: {}", QUEUE_NAME);
-
-            // 4. Attempt direct delivery
-            try {
-                deliveryService.deliver(event);
-                event.setStatus("DELIVERED");
-                eventRepository.save(event);
-                createAuditLog(event, "DELIVERED", "Notification delivered successfully via " + request.getNotificationType());
-                log.info("✅ Notification delivered successfully!");
-            } catch (Exception e) {
-                event.setStatus("PENDING");
-                eventRepository.save(event);
-                createAuditLog(event, "PENDING", "Will retry: " + e.getMessage());
-                log.warn("Initial delivery failed, queued for retry: {}", e.getMessage());
+            var rule = ruleRepository.findByNotificationType(request.getNotificationType());
+            if (rule == null) {
+                throw new IllegalArgumentException("Rule not found for type: " + request.getNotificationType());
             }
+
+            NotificationEvent event = new NotificationEvent();
+            event.setChannel(rule.getChannel());
+            event.setRecipient(request.getRecipient());
+            event.setMessage(request.getMessage());
+            event.setStatus("QUEUED");
+            event.setRetryCount(0);
+            event.setCreatedAt(LocalDateTime.now());
+            event.setUpdatedAt(LocalDateTime.now());
+            eventRepository.save(event);
+
+            log.info("Notification event created with ID: {}", event.getId());
+
+            createAuditLog(event, "CREATED", "Notification created and queued");
+
+            publishToQueue(event, rule.getPriority());
 
             return NotificationResponse.builder()
                     .eventId(event.getId())
-                    .status(event.getStatus())
-                    .message("Notification " + event.getStatus())
+                    .status("QUEUED")
+                    .message("Notification queued successfully")
                     .build();
 
         } catch (Exception e) {
-            log.error("❌ sendNotification() failed: {}", e.getMessage(), e);
+            log.error("sendNotification() failed: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to send notification: " + e.getMessage(), e);
         }
     }
 
-    private NotificationEvent createNotificationEvent(NotificationRequest request) {
-        NotificationEvent event = new NotificationEvent();
-        event.setChannel(request.getNotificationType().toUpperCase());
-        event.setRecipient(request.getRecipient());
-        event.setMessage(request.getMessage());
-        event.setStatus("PENDING");
-        event.setRetryCount(0);
-        event.setCreatedAt(LocalDateTime.now());
-        event.setUpdatedAt(LocalDateTime.now());
-        return event;
-    }
-
-    private void publishToQueue(NotificationEvent event) {
+    private void publishToQueue(NotificationEvent event, String priorityStr) {
         try {
-            rabbitTemplate.convertAndSend(QUEUE_NAME, event);
-            log.info("Event ID {} published to queue", event.getId());
+            int priority = mapPriority(priorityStr);
+            rabbitTemplate.convertAndSend(QUEUE_NAME, event, msg -> {
+                msg.getMessageProperties().setPriority(priority);
+                return msg;
+            });
+            log.info("Event ID {} published to queue with priority {}", event.getId(), priority);
         } catch (Exception e) {
             log.error("Failed to publish to queue: {}", e.getMessage());
+            throw e;
         }
+    }
+
+    private int mapPriority(String priority) {
+        return switch (priority.toUpperCase()) {
+            case "CRITICAL" -> 10;
+            case "HIGH"     -> 7;
+            case "MEDIUM"   -> 5;
+            case "LOW"      -> 1;
+            default -> {
+                try { yield Integer.parseInt(priority); }
+                catch (NumberFormatException ex) { yield 3; }
+            }
+        };
     }
 
     private void createAuditLog(NotificationEvent event, String action, String details) {
         try {
-            AuditLog log = AuditLog.builder()
+            AuditLog logEntry = AuditLog.builder()
                     .eventId(event.getId())
                     .action(action)
                     .details(details)
-                    .timestamp(LocalDateTime.now())  // ✅ Uses 'timestamp' field
+                    .timestamp(LocalDateTime.now())
                     .build();
-            auditLogRepository.save(log);
+            auditLogRepository.save(logEntry);
         } catch (Exception e) {
-            log.error(" Failed to create audit log: {}", e.getMessage());
+            log.error("Failed to create audit log: {}", e.getMessage());
         }
     }
 
-    public NotificationEvent getEventStatus(Long eventId) throws Exception {
+    public NotificationEvent getEventStatus(Long eventId) {
         Optional<NotificationEvent> event = eventRepository.findById(eventId);
         if (event.isEmpty()) {
             throw new IllegalArgumentException("Event not found with ID: " + eventId);
