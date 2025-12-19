@@ -26,12 +26,21 @@ public class NotificationEvent {
     private String channel;
 
     @Column(nullable = false)
+    private String priority = "MEDIUM";  // Frontend filter
+
+    @Column(length = 100)
+    private String notificationType;     // Frontend analytics
+
+    @Column(length = 255)
+    private String subject;
+
+    @Column(nullable = false)
     private String status;
 
     @Column
     private Integer retryCount = 0;
 
-    @Column
+    @Column(length = 255)
     private String failureReason;
 
     @Column(nullable = false)
@@ -39,4 +48,16 @@ public class NotificationEvent {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    // Frontend filtering indexes (add these)
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

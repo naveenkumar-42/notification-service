@@ -40,13 +40,19 @@ public class EmailSender {
 
     /** Send HTML email */
     public void sendHtmlEmail(NotificationEvent event) {
+
+        String subject = event.getSubject();
+        if (subject == null || subject.isBlank()) {
+            subject = "[Notification] " + (event.getNotificationType() != null ? event.getNotificationType() : "Update");
+        }
+
         log.info("Sending HTML EMAIL to: {}", event.getRecipient());
         try {
             ensureConfigured();
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
             helper.setTo(event.getRecipient());
-            helper.setSubject(generateSubject(event));
+            helper.setSubject(subject);
             helper.setFrom(senderConfig.getEmailFromAddress());
             helper.setReplyTo(senderConfig.getEmailReplyTo());
             helper.setText(buildHtmlEmail(event), true);

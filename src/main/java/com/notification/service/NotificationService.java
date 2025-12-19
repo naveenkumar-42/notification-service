@@ -21,44 +21,38 @@ import java.util.Optional;
 @Slf4j
 public class NotificationService {
 
-    @Autowired
-    private NotificationEventRepository eventRepository;
-
-    @Autowired
-    private AuditLogRepository auditLogRepository;
-
-    @Autowired
-    private NotificationRuleRepository ruleRepository;
-
-    @Autowired
-    private RabbitTemplate rabbitTemplate;
+    @Autowired private NotificationEventRepository eventRepository;
+    @Autowired private AuditLogRepository auditLogRepository;
+    @Autowired private NotificationRuleRepository ruleRepository;
+    @Autowired private RabbitTemplate rabbitTemplate;
 
     private static final String QUEUE_NAME = "notification.queue";
 
     @Transactional
     public NotificationResponse sendNotification(NotificationRequest request) {
-        log.info("sendNotification() called - Type: {}, Recipient: {}",
-                request.getNotificationType(), request.getRecipient());
+        log.info("📤 sendNotification() - Type: {}, Recipient: {}", request.getNotificationType(), request.getRecipient());
+
         try {
             var rule = ruleRepository.findByNotificationType(request.getNotificationType());
             if (rule == null) {
                 throw new IllegalArgumentException("Rule not found for type: " + request.getNotificationType());
             }
 
-            NotificationEvent event = new NotificationEvent();
-            event.setChannel(rule.getChannel());
-            event.setRecipient(request.getRecipient());
-            event.setMessage(request.getMessage());
-            event.setStatus("QUEUED");
-            event.setRetryCount(0);
-            event.setCreatedAt(LocalDateTime.now());
-            event.setUpdatedAt(LocalDateTime.now());
-            eventRepository.save(event);
+            NotificationEvent event = NotificationEvent.builder()
+                    .channel(rule.getChannel())
+                    .notificationType(request.getNotificationType())
+                    .priority(rule.getPriority())
+                    .recipient(request.getRecipient())
+                    .subject(request.getSubject())
+                    .message(request.getMessage())
+                    .status("QUEUED")
+                    .retryCount(0)
+                    .build();
 
-            log.info("Notification event created with ID: {}", event.getId());
+            eventRepository.save(event);
+            log.info("✅ Event created ID: {}", event.getId());
 
             createAuditLog(event, "CREATED", "Notification created and queued");
-
             publishToQueue(event, rule.getPriority());
 
             return NotificationResponse.builder()
@@ -68,9 +62,80 @@ public class NotificationService {
                     .build();
 
         } catch (Exception e) {
-            log.error("sendNotification() failed: {}", e.getMessage(), e);
+            log.error("❌ sendNotification failed: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to send notification: " + e.getMessage(), e);
         }
+    }
+
+    // ✅ FRONTEND FILTERING METHODS
+    public List<NotificationEvent> getEventsByStatus(String status) {
+        return eventRepository.findByStatusIgnoreCase(status);
+    }
+
+    public List<NotificationEvent> getEventsByPriority(String priority) {
+        return eventRepository.findByPriorityIgnoreCase(priority);
+    }
+
+    public List<NotificationEvent> getEventsByChannel(String channel) {
+        return eventRepository.findByChannelIgnoreCase(channel);
+    }
+
+    public List<NotificationEvent> getFilteredEvents(String status, String priority, String channel, String dateRange) {
+        log.info("🔍 Filtering: status={}, priority={}, channel={}, dateRange='{}'",
+                status, priority, channel, dateRange);
+
+        LocalDateTime startDate = getDateRangeStart(dateRange);
+        log.info("📅 Calculated startDate: {}", startDate);
+
+        List<NotificationEvent> events = eventRepository.findByFilters(status, priority, channel, startDate);
+        log.info("📊 Found {} events after filtering", events.size());
+
+        return events;
+    }
+
+    // ✅ PERFECT DATE FILTER - FIXES "ALL TIME" ISSUE
+    private LocalDateTime getDateRangeStart(String dateRange) {
+        // "all", null, empty, or "all time" = SHOW ALL RECORDS
+        if (dateRange == null || dateRange.trim().isEmpty() ||
+                dateRange.equalsIgnoreCase("all") ||
+                dateRange.equalsIgnoreCase("all time") ||
+                dateRange.equalsIgnoreCase("alltime")) {
+            log.info("📅 DateRange 'all' → Returning NULL (show all records)");
+            return null;  // ✅ SHOWS ALL RECORDS
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        String normalizedRange = dateRange.toLowerCase().trim();
+
+        return switch (normalizedRange) {
+            case "24h", "24hr" -> {
+                log.info("📅 24h filter → {}", now.minusHours(24));
+                yield now.minusHours(24);
+            }
+            case "7d", "7day", "7days" -> {
+                log.info("📅 7d filter → {}", now.minusDays(7));
+                yield now.minusDays(7);
+            }
+            case "30d", "30day", "30days" -> {
+                log.info("📅 30d filter → {}", now.minusDays(30));
+                yield now.minusDays(30);
+            }
+            default -> {
+                log.warn("📅 Unknown dateRange '{}', showing all records", dateRange);
+                yield null;  // ✅ FALLBACK: SHOW ALL
+            }
+        };
+    }
+
+    // Existing methods
+    public NotificationEvent getEventStatus(Long eventId) {
+        Optional<NotificationEvent> event = eventRepository.findById(eventId);
+        if (event.isEmpty()) throw new IllegalArgumentException("Event not found: " + eventId);
+        return event.get();
+    }
+
+    public List<NotificationEvent> getAllEvents() {
+        return eventRepository.findAll();
     }
 
     private void publishToQueue(NotificationEvent event, String priorityStr) {
@@ -80,53 +145,30 @@ public class NotificationService {
                 msg.getMessageProperties().setPriority(priority);
                 return msg;
             });
-            log.info("Event ID {} published to queue with priority {}", event.getId(), priority);
+            log.info("📤 Event {} to queue (priority: {})", event.getId(), priority);
         } catch (Exception e) {
-            log.error("Failed to publish to queue: {}", e.getMessage());
+            log.error("❌ Queue publish failed: {}", e.getMessage());
             throw e;
         }
     }
 
     private int mapPriority(String priority) {
         return switch (priority.toUpperCase()) {
-            case "CRITICAL" -> 10;
-            case "HIGH"     -> 7;
-            case "MEDIUM"   -> 5;
-            case "LOW"      -> 1;
-            default -> {
-                try { yield Integer.parseInt(priority); }
-                catch (NumberFormatException ex) { yield 3; }
-            }
+            case "CRITICAL" -> 10; case "HIGH" -> 7;
+            case "MEDIUM" -> 5; case "LOW" -> 1;
+            default -> 3;
         };
     }
 
     private void createAuditLog(NotificationEvent event, String action, String details) {
         try {
             AuditLog logEntry = AuditLog.builder()
-                    .eventId(event.getId())
-                    .action(action)
-                    .details(details)
-                    .timestamp(LocalDateTime.now())
+                    .eventId(event.getId()).action(action)
+                    .details(details).timestamp(LocalDateTime.now())
                     .build();
             auditLogRepository.save(logEntry);
         } catch (Exception e) {
-            log.error("Failed to create audit log: {}", e.getMessage());
+            log.error("❌ Audit log failed: {}", e.getMessage());
         }
-    }
-
-    public NotificationEvent getEventStatus(Long eventId) {
-        Optional<NotificationEvent> event = eventRepository.findById(eventId);
-        if (event.isEmpty()) {
-            throw new IllegalArgumentException("Event not found with ID: " + eventId);
-        }
-        return event.get();
-    }
-
-    public List<NotificationEvent> getAllEvents() {
-        return eventRepository.findAll();
-    }
-
-    public List<NotificationEvent> getEventsByStatus(String status) {
-        return eventRepository.findByStatus(status.toUpperCase());
     }
 }
