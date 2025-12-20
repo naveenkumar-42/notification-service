@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,13 +31,29 @@ public class NotificationService {
 
     @Transactional
     public NotificationResponse sendNotification(NotificationRequest request) {
-        log.info("📤 sendNotification() - Type: {}, Recipient: {}", request.getNotificationType(), request.getRecipient());
+        log.info("sendNotification() - Type: {}, Recipient: {}",
+                request.getNotificationType(), request.getRecipient());
 
         try {
             var rule = ruleRepository.findByNotificationType(request.getNotificationType());
             if (rule == null) {
                 throw new IllegalArgumentException("Rule not found for type: " + request.getNotificationType());
             }
+
+            // Parse scheduled time (if any) from frontend
+            LocalDateTime scheduledAt = null;
+            if (request.getScheduledTime() != null && !request.getScheduledTime().isBlank()) {
+                try {
+                    // Frontend datetime-local: "2025-12-19T11:45"
+                    scheduledAt = LocalDateTime.parse(request.getScheduledTime());
+                } catch (DateTimeParseException ex) {
+                    log.warn("Invalid scheduledTime format: {}", request.getScheduledTime());
+                }
+            }
+
+            // Decide initial status based on schedule
+            boolean isFutureSchedule = scheduledAt != null && scheduledAt.isAfter(LocalDateTime.now());
+            String initialStatus = isFutureSchedule ? "SCHEDULED" : "QUEUED";
 
             NotificationEvent event = NotificationEvent.builder()
                     .channel(rule.getChannel())
@@ -45,29 +62,39 @@ public class NotificationService {
                     .recipient(request.getRecipient())
                     .subject(request.getSubject())
                     .message(request.getMessage())
-                    .status("QUEUED")
+                    .status(initialStatus)
                     .retryCount(0)
+                    .scheduledAt(scheduledAt)
                     .build();
 
             eventRepository.save(event);
-            log.info("✅ Event created ID: {}", event.getId());
+            log.info("Event created ID: {} with status {}", event.getId(), event.getStatus());
 
-            createAuditLog(event, "CREATED", "Notification created and queued");
-            publishToQueue(event, rule.getPriority());
+            String auditMsg = isFutureSchedule
+                    ? "Notification scheduled for " + scheduledAt
+                    : "Notification created and queued";
+            createAuditLog(event, "CREATED", auditMsg);
+
+            // Only publish to queue if we should send now
+            if (!isFutureSchedule) {
+                publishToQueue(event, rule.getPriority());
+            }
 
             return NotificationResponse.builder()
                     .eventId(event.getId())
-                    .status("QUEUED")
-                    .message("Notification queued successfully")
+                    .status(initialStatus)
+                    .message(isFutureSchedule
+                            ? "Notification scheduled successfully"
+                            : "Notification queued successfully")
                     .build();
 
         } catch (Exception e) {
-            log.error("❌ sendNotification failed: {}", e.getMessage(), e);
+            log.error("sendNotification failed: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to send notification: " + e.getMessage(), e);
         }
     }
 
-    // ✅ FRONTEND FILTERING METHODS
+    // FRONTEND FILTERING METHODS
     public List<NotificationEvent> getEventsByStatus(String status) {
         return eventRepository.findByStatusIgnoreCase(status);
     }
@@ -81,49 +108,36 @@ public class NotificationService {
     }
 
     public List<NotificationEvent> getFilteredEvents(String status, String priority, String channel, String dateRange) {
-        log.info("🔍 Filtering: status={}, priority={}, channel={}, dateRange='{}'",
+        log.info("Filtering: status={}, priority={}, channel={}, dateRange='{}'",
                 status, priority, channel, dateRange);
 
         LocalDateTime startDate = getDateRangeStart(dateRange);
-        log.info("📅 Calculated startDate: {}", startDate);
+        log.info("Calculated startDate: {}", startDate);
 
         List<NotificationEvent> events = eventRepository.findByFilters(status, priority, channel, startDate);
-        log.info("📊 Found {} events after filtering", events.size());
+        log.info("Found {} events after filtering", events.size());
 
         return events;
     }
 
-    // ✅ PERFECT DATE FILTER - FIXES "ALL TIME" ISSUE
+    // PERFECT DATE FILTER - "all time" = all records
     private LocalDateTime getDateRangeStart(String dateRange) {
-        // "all", null, empty, or "all time" = SHOW ALL RECORDS
         if (dateRange == null || dateRange.trim().isEmpty() ||
                 dateRange.equalsIgnoreCase("all") ||
                 dateRange.equalsIgnoreCase("all time") ||
                 dateRange.equalsIgnoreCase("alltime")) {
-            log.info("📅 DateRange 'all' → Returning NULL (show all records)");
-            return null;  // ✅ SHOWS ALL RECORDS
+            log.info("DateRange 'all' → Returning NULL (show all records)");
+            return null;
         }
 
         LocalDateTime now = LocalDateTime.now();
         String normalizedRange = dateRange.toLowerCase().trim();
 
         return switch (normalizedRange) {
-            case "24h", "24hr" -> {
-                log.info("📅 24h filter → {}", now.minusHours(24));
-                yield now.minusHours(24);
-            }
-            case "7d", "7day", "7days" -> {
-                log.info("📅 7d filter → {}", now.minusDays(7));
-                yield now.minusDays(7);
-            }
-            case "30d", "30day", "30days" -> {
-                log.info("📅 30d filter → {}", now.minusDays(30));
-                yield now.minusDays(30);
-            }
-            default -> {
-                log.warn("📅 Unknown dateRange '{}', showing all records", dateRange);
-                yield null;  // ✅ FALLBACK: SHOW ALL
-            }
+            case "24h", "24hr" -> now.minusHours(24);
+            case "7d", "7day", "7days" -> now.minusDays(7);
+            case "30d", "30day", "30days" -> now.minusDays(30);
+            default -> null;
         };
     }
 
@@ -145,30 +159,34 @@ public class NotificationService {
                 msg.getMessageProperties().setPriority(priority);
                 return msg;
             });
-            log.info("📤 Event {} to queue (priority: {})", event.getId(), priority);
+            log.info("Event {} published to queue (priority: {})", event.getId(), priority);
         } catch (Exception e) {
-            log.error("❌ Queue publish failed: {}", e.getMessage());
+            log.error("Queue publish failed: {}", e.getMessage());
             throw e;
         }
     }
 
     private int mapPriority(String priority) {
         return switch (priority.toUpperCase()) {
-            case "CRITICAL" -> 10; case "HIGH" -> 7;
-            case "MEDIUM" -> 5; case "LOW" -> 1;
-            default -> 3;
+            case "CRITICAL" -> 10;
+            case "HIGH"     -> 7;
+            case "MEDIUM"   -> 5;
+            case "LOW"      -> 1;
+            default         -> 3;
         };
     }
 
     private void createAuditLog(NotificationEvent event, String action, String details) {
         try {
             AuditLog logEntry = AuditLog.builder()
-                    .eventId(event.getId()).action(action)
-                    .details(details).timestamp(LocalDateTime.now())
+                    .eventId(event.getId())
+                    .action(action)
+                    .details(details)
+                    .timestamp(LocalDateTime.now())
                     .build();
             auditLogRepository.save(logEntry);
         } catch (Exception e) {
-            log.error("❌ Audit log failed: {}", e.getMessage());
+            log.error("Audit log failed: {}", e.getMessage());
         }
     }
 }

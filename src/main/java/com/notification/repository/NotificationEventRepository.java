@@ -17,6 +17,8 @@ public interface NotificationEventRepository extends JpaRepository<NotificationE
     List<NotificationEvent> findByChannelIgnoreCase(String channel);
     List<NotificationEvent> findByRecipient(String recipient);
     List<NotificationEvent> findByRetryCount(Integer retryCount);
+    List<NotificationEvent> findByStatusAndScheduledAtBefore(String status, LocalDateTime time);
+
 
     // FRONTEND HISTORY FILTER (COMPLETE)
     @Query("SELECT e FROM NotificationEvent e WHERE " +

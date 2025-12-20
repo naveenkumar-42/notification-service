@@ -49,6 +49,9 @@ public class NotificationEvent {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column
+    private LocalDateTime scheduledAt;   // when it should be sent (optional)
+
     // Frontend filtering indexes (add these)
     @PrePersist
     protected void onCreate() {

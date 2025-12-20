@@ -17,7 +17,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/notifications")
 @Slf4j
-@CrossOrigin(origins = {"http://localhost:3000", "http://127.0.0.1:3000"})
+@CrossOrigin(origins = {"http://localhost:3000","https://notificationservice-blond.vercel.app", "http://127.0.0.1:3000"})
 public class NotificationController {
 
     private final NotificationService notificationService;
