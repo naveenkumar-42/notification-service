@@ -121,6 +121,50 @@ Security note: Do NOT commit secrets (SMTP password, Twilio tokens) into VCS; us
    java -jar target/notification-service-*.jar
 
 
+## Environment Variables (recommended)
+
+This project ships with `src/main/resources/application.properties` for convenience but you should use environment variables for secrets in real deployments. Below are recommended environment variable names and their mapping to Spring properties.
+
+Example `.env` (create a `.env` or set these in your environment):
+
+```
+# Server
+SPRING_SERVER_PORT=8080
+
+# Datasource
+SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/notification_db?useSSL=false&serverTimezone=UTC
+SPRING_DATASOURCE_USERNAME=root
+SPRING_DATASOURCE_PASSWORD=
+
+# RabbitMQ
+SPRING_RABBITMQ_HOST=127.0.0.1
+SPRING_RABBITMQ_PORT=5672
+SPRING_RABBITMQ_USERNAME=guest
+SPRING_RABBITMQ_PASSWORD=guest
+
+# SMTP (Spring Mail)
+SPRING_MAIL_HOST=smtp.gmail.com
+SPRING_MAIL_PORT=587
+SPRING_MAIL_USERNAME=your-email@gmail.com
+SPRING_MAIL_PASSWORD=your-email-password
+
+# Twilio (SMS)
+NOTIFICATION_SENDER_SMS_ACCOUNT_SID=your-twilio-account-sid
+NOTIFICATION_SENDER_SMS_AUTH_TOKEN=your-twilio-auth-token
+NOTIFICATION_SENDER_SMS_FROM_NUMBER=+1234567890
+```
+
+To reference environment variables in `application.properties` use Spring placeholders, for example:
+
+```
+spring.mail.username=${SPRING_MAIL_USERNAME:}
+spring.mail.password=${SPRING_MAIL_PASSWORD:}
+notification.sender.sms.account-sid=${NOTIFICATION_SENDER_SMS_ACCOUNT_SID:}
+```
+
+See the provided `.env.example` file for a copy of useful variables.
+
+
 ## HTTP Endpoints
 
 Base URL: http://localhost:8080
@@ -302,4 +346,4 @@ Security note: The repository currently contains example values in `application.
 
 ---
 
-If you'd like, I can commit this README to the repo (already created), redact the secrets from `application.properties`, or generate a simplified environment variable `.env` example file and a quick start script. Tell me which of these you'd like next.
+If you'd like, I can redact secrets from `src/main/resources/application.properties` and add `application.properties.example` that reads from these env variables. Tell me if you want me to do that and whether to commit the changes now.

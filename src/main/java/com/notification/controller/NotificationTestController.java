@@ -2,7 +2,6 @@ package com.notification.controller;
 
 import com.notification.dto.NotificationRequest;
 import com.notification.dto.NotificationResponse;
-import com.notification.service.NotificationService;
 import com.notification.service.sender.SenderConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,8 +40,11 @@ public class NotificationTestController {
             SimpleMailMessage email = new SimpleMailMessage();
             email.setTo("naveenkumarpoff@gmail.com");
             email.setSubject("✅ Test Simple Email from Spring Boot");
-            email.setText("If you see this, EMAIL is working!\n\n" +
-                    "Your notification system is ready! 🎉");
+            email.setText("""
+                    If you see this, EMAIL is working!
+                    
+                    Your notification system is ready! 🎉
+                    """);
             email.setFrom("your-email@gmail.com");
 
             mailSender.send(email);
@@ -77,19 +79,21 @@ public class NotificationTestController {
             helper.setSubject("✅ Test HTML Email from Spring Boot");
             helper.setFrom("your-email@gmail.com");
 
-            String htmlContent = "<!DOCTYPE html>" +
-                    "<html>" +
-                    "<head><meta charset='UTF-8'></head>" +
-                    "<body style='font-family: Arial; background-color: #f5f5f5;'>" +
-                    "<div style='max-width: 600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px;'>" +
-                    "<h2 style='color: #667eea;'>✅ HTML Email Test</h2>" +
-                    "<p>Congratulations! Your <strong>HTML Email</strong> is working perfectly! 🎉</p>" +
-                    "<p>This email demonstrates rich text formatting capabilities.</p>" +
-                    "<hr style='border: none; border-top: 1px solid #ddd;'/>" +
-                    "<p style='color: #999; font-size: 12px;'>This is an automated message. Please do not reply.</p>" +
-                    "</div>" +
-                    "</body>" +
-                    "</html>";
+            String htmlContent = """
+                    <!DOCTYPE html>
+                    <html>
+                    <head><meta charset='UTF-8'></head>
+                    <body style='font-family: Arial; background-color: #f5f5f5;'>
+                    <div style='max-width: 600px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px;'>
+                    <h2 style='color: #667eea;'>✅ HTML Email Test</h2>
+                    <p>Congratulations! Your <strong>HTML Email</strong> is working perfectly! 🎉</p>
+                    <p>This email demonstrates rich text formatting capabilities.</p>
+                    <hr style='border: none; border-top: 1px solid #ddd;'/>
+                    <p style='color: #999; font-size: 12px;'>This is an automated message. Please do not reply.</p>
+                    </div>
+                    </body>
+                    </html>
+                    """;
 
             helper.setText(htmlContent, true);
             mailSender.send(mimeMessage);
@@ -188,16 +192,19 @@ public class NotificationTestController {
      */
     @GetMapping("/sms/instructions")
     public String getSmsInstructions() {
-        return "📱 SMS (TWILIO) SETUP INSTRUCTIONS:\n\n" +
-                "1. Sign up at: https://www.twilio.com\n" +
-                "2. Get your credentials from: https://www.twilio.com/console\n" +
-                "3. Add to application.properties:\n" +
-                "   notification.sender.sms.account-sid=your-account-sid\n" +
-                "   notification.sender.sms.auth-token=your-auth-token\n" +
-                "   notification.sender.sms.from-number=+1234567890\n" +
-                "4. Format phone numbers: +1234567890 or 1234567890\n" +
-                "5. Send SMS via: POST /api/notifications/send\n" +
-                "   Body: { \"notificationType\": \"SMS\", \"recipient\": \"+1234567890\", \"message\": \"Hello\" }\n";
+        return """
+                📱 SMS (TWILIO) SETUP INSTRUCTIONS:
+                
+                1. Sign up at: https://www.twilio.com
+                2. Get your credentials from: https://www.twilio.com/console
+                3. Add to application.properties:
+                   notification.sender.sms.account-sid=your-account-sid
+                   notification.sender.sms.auth-token=your-auth-token
+                   notification.sender.sms.from-number=+1234567890
+                4. Format phone numbers: +1234567890 or 1234567890
+                5. Send SMS via: POST /api/notifications/send
+                   Body: { "notificationType": "SMS", "recipient": "+1234567890", "message": "Hello" }
+                """;
     }
 
     // ===== GENERAL TESTS =====
@@ -221,17 +228,22 @@ public class NotificationTestController {
      */
     @GetMapping("/endpoints")
     public String getTestEndpoints() {
-        return "📋 AVAILABLE TEST ENDPOINTS:\n\n" +
-                "EMAIL TESTS:\n" +
-                "  1. Simple Email: GET http://localhost:8080/api/test/email/simple\n" +
-                "  2. HTML Email: GET http://localhost:8080/api/test/email/html\n" +
-                "  3. Custom Email: POST http://localhost:8080/api/test/email/custom\n" +
-                "     Body: {\"notificationType\":\"EMAIL\", \"recipient\":\"test@example.com\", \"message\":\"Your message\"}\n\n" +
-                "SMS TESTS:\n" +
-                "  1. SMS Config: GET http://localhost:8080/api/test/sms/config\n" +
-                "  2. SMS Instructions: GET http://localhost:8080/api/test/sms/instructions\n\n" +
-                "GENERAL:\n" +
-                "  1. Health Check: GET http://localhost:8080/api/test/health\n" +
-                "  2. Endpoints: GET http://localhost:8080/api/test/endpoints\n";
+        return """
+                📋 AVAILABLE TEST ENDPOINTS:
+                
+                EMAIL TESTS:
+                  1. Simple Email: GET http://localhost:8080/api/test/email/simple
+                  2. HTML Email: GET http://localhost:8080/api/test/email/html
+                  3. Custom Email: POST http://localhost:8080/api/test/email/custom
+                     Body: {"notificationType":"EMAIL", "recipient":"test@example.com", "message":"Your message"}
+                
+                SMS TESTS:
+                  1. SMS Config: GET http://localhost:8080/api/test/sms/config
+                  2. SMS Instructions: GET http://localhost:8080/api/test/sms/instructions
+                
+                GENERAL:
+                  1. Health Check: GET http://localhost:8080/api/test/health
+                  2. Endpoints: GET http://localhost:8080/api/test/endpoints
+                """;
     }
 }
