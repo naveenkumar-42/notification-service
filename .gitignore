@@ -33,12 +33,8 @@ build/
 .vscode/
 
 # Local env and secrets
-.env
-src/main/resources/application.properties
-
 # IntelliJ run configurations
 .idea/
-
 .env
 *.env
 src/main/resources/application*.properties
