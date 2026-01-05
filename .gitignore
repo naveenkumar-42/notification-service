@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local env and secrets
+.env
+src/main/resources/application.properties
+
+# IntelliJ run configurations
+.idea/
