@@ -7,8 +7,12 @@ import com.notification.repository.AuditLogRepository;
 import com.notification.repository.NotificationEventRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 
+import com.rabbitmq.client.Channel;
+import java.io.IOException;
 import java.time.LocalDateTime;
 
 @Service
@@ -31,20 +35,23 @@ public class NotificationConsumer {
     }
 
     @RabbitListener(queues = RabbitMQConfig.MAIN_QUEUE)
-    public void consumeNotification(NotificationEvent event) {
-        log.info("========================================");
+    public void consumeNotification(NotificationEvent event,
+                                    Channel channel,
+                                    @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
         log.info("📨 CONSUMING Message - Event ID: {}", event.getId());
-        log.info(" Recipient: {}", event.getRecipient());
-        log.info(" Channel: {}", event.getChannel());
-        log.info("========================================");
+        log.info("📧 Recipient: {}", event.getRecipient());
+        log.info("📤 Channel: {}", event.getChannel());
 
         try {
+            // ✅ SEND NOTIFICATION
             deliveryService.deliver(event);
 
-            event.setStatus("SENT");
+            // ✅ UPDATE STATUS TO DELIVERED
+            event.setStatus("DELIVERED");
             event.setUpdatedAt(LocalDateTime.now());
             eventRepository.save(event);
 
+            // ✅ CREATE AUDIT LOG
             auditLogRepository.save(AuditLog.builder()
                     .eventId(event.getId())
                     .action("SENT")
@@ -52,45 +59,68 @@ public class NotificationConsumer {
                     .timestamp(LocalDateTime.now())
                     .build());
 
-            log.info("✓✓ NOTIFICATION SENT SUCCESSFULLY ✓✓\n");
+            // ✅ ACKNOWLEDGE MESSAGE (CRITICAL - tells RabbitMQ to delete from queue)
+            channel.basicAck(deliveryTag, false);
+            log.info("✅ Message acknowledged and removed from queue - Event ID: {}", event.getId());
+
+            log.info("✅ NOTIFICATION SENT SUCCESSFULLY - Event ID: {}", event.getId());
 
         } catch (Exception e) {
-            log.error("Error processing notification: {}", e.getMessage(), e);
-            handleFailure(event, e);
+            log.error("❌ Error processing notification - Event ID: {}, Error: {}", event.getId(), e.getMessage(), e);
+            handleFailure(event, channel, deliveryTag, e);
         }
     }
 
-    private void handleFailure(NotificationEvent event, Exception e) {
-        log.warn("Notification failed - Event ID: {}", event.getId());
+    private void handleFailure(NotificationEvent event, Channel channel, long deliveryTag, Exception e) {
+        log.warn("🔄 Handling notification failure for Event ID: {}", event.getId());
+
         event.setFailureReason(e.getMessage());
         event.setUpdatedAt(LocalDateTime.now());
 
-        if (event.getRetryCount() < 3) {
-            log.warn("→ Scheduling retry (Attempt {}/3)", event.getRetryCount() + 1);
-            event.setRetryCount(event.getRetryCount() + 1);
-            event.setStatus("RETRY");
-            eventRepository.save(event);
+        try {
+            if (event.getRetryCount() < 3) {
+                log.warn("📤 Scheduling retry - Attempt {}/3 for Event ID: {}",
+                        event.getRetryCount() + 1, event.getId());
 
-            auditLogRepository.save(AuditLog.builder()
-                    .eventId(event.getId())
-                    .action("RETRY_SCHEDULED")
-                    .details("Retrying notification, attempt " + event.getRetryCount())
-                    .timestamp(LocalDateTime.now())
-                    .build());
+                event.setRetryCount(event.getRetryCount() + 1);
+                event.setStatus("RETRY_SCHEDULED");
+                eventRepository.save(event);
 
-            producer.sendToRetryQueue(event);
+                auditLogRepository.save(AuditLog.builder()
+                        .eventId(event.getId())
+                        .action("RETRY_SCHEDULED")
+                        .details("Retrying notification, attempt " + event.getRetryCount())
+                        .timestamp(LocalDateTime.now())
+                        .build());
 
-        } else {
-            log.error("MAX RETRIES EXCEEDED - Moving to DLQ");
-            event.setStatus("FAILED");
-            eventRepository.save(event);
+                producer.sendToRetryQueue(event);
 
-            auditLogRepository.save(AuditLog.builder()
-                    .eventId(event.getId())
-                    .action("FAILED")
-                    .details("Max retries (3) exceeded: " + e.getMessage())
-                    .timestamp(LocalDateTime.now())
-                    .build());
+                // ✅ NACK and requeue to retry queue
+                channel.basicNack(deliveryTag, false, false);
+                log.warn("⚠️ Message NACK'd - Event ID: {}", event.getId());
+
+            } else {
+                log.error("❌ MAX RETRIES EXCEEDED - Moving to DLQ for Event ID: {}", event.getId());
+
+                event.setStatus("FAILED");
+                eventRepository.save(event);
+
+                auditLogRepository.save(AuditLog.builder()
+                        .eventId(event.getId())
+                        .action("FAILED")
+                        .details("Max retries (3) exceeded: " + e.getMessage())
+                        .timestamp(LocalDateTime.now())
+                        .build());
+
+                // Send to DLQ
+                producer.sendToDLQ(event);
+
+                // ✅ Acknowledge to remove from main queue (going to DLQ)
+                channel.basicAck(deliveryTag, false);
+                log.error("❌ Message moved to DLQ and acknowledged - Event ID: {}", event.getId());
+            }
+        } catch (IOException ioException) {
+            log.error("❌ Failed to send ACK/NACK: {}", ioException.getMessage());
         }
     }
 }

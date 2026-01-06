@@ -2,6 +2,7 @@ package com.notification.service;
 
 import com.notification.entity.NotificationEvent;
 import com.notification.service.sender.EmailSender;
+import com.notification.service.sender.FirebasePushSender;
 import com.notification.service.sender.SmsSender;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,12 @@ public class NotificationDeliveryService {
 
     @Autowired
     private SmsSender smsSender;
+
+    @Autowired
+    private FirebasePushSender pushSender;
+
+// Then use pushSender.sendPushNotification(event);
+
 
     public void deliver(NotificationEvent event) throws Exception {
         String channel = event.getChannel();
@@ -52,9 +59,20 @@ public class NotificationDeliveryService {
         }
     }
 
+    // KEEP ALL EXISTING CODE - REPLACE ONLY deliverPush method:
     private void deliverPush(NotificationEvent event) throws Exception {
-        log.info("🔔 [SIMULATED] Sending PUSH to: {}", event.getRecipient());
-        Thread.sleep(75);
-        event.setStatus("DELIVERED");
+        log.info("🔥 Delivering PUSH for event ID: {}", event.getId());
+        FirebasePushSender pushSender = new FirebasePushSender(); // Works with autowired config
+        try {
+            pushSender.sendPush(event);
+            event.setStatus("DELIVERED");
+            log.info("✅ PUSH delivered: {}", event.getId());
+        } catch (Exception e) {
+            log.error("❌ PUSH failed {}: {}", event.getId(), e.getMessage());
+            event.setStatus("FAILED");
+            event.setFailureReason("PUSH: " + e.getMessage());
+            throw e;
+        }
     }
+
 }

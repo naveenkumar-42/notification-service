@@ -207,6 +207,28 @@ public class NotificationTestController {
                 """;
     }
 
+    @GetMapping("/testpush")
+    public NotificationResponse testPush() {
+        log.info("🧪 Testing Firebase PUSH");
+        return NotificationResponse.builder()
+                .status("READY")
+                .message("""
+            ✅ Firebase PUSH READY!
+            Test with POST /api/notifications/send:
+            {
+              "channel": "PUSH",
+              "recipient": "YOUR_FCM_TOKEN_HERE",
+              "message": "Hello PUSH!",
+              "notificationType": "PUSH_EVENT",
+              "priority": "HIGH"
+            }
+            Your project: notification-management-5d62d
+            """)
+                .build();
+    }
+
+
+
     // ===== GENERAL TESTS =====
 
     /**

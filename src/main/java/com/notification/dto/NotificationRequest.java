@@ -22,5 +22,11 @@ public class NotificationRequest {
     @NotBlank(message = "Subject is required")
     private String subject;         // 🔹 NEW
 
+    @NotBlank(message = "Channel is required")
+    private String channel; // ✨ NEW: User provides
+
+    @NotBlank(message = "Priority is required")
+    private String priority;
+
     private String scheduledTime;   // if you use it
 }

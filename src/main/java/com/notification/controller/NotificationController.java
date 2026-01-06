@@ -23,66 +23,79 @@ public class NotificationController {
     @Autowired
     private NotificationService notificationService;
 
-    // 🔥 SMS + SCHEDULING FIXED
+    // ============================================================================
+    // SEND NOTIFICATION (USER PROVIDES CHANNEL & PRIORITY DIRECTLY)
+    // ============================================================================
+
     @PostMapping("/send")
-    public ResponseEntity<NotificationResponse> sendNotification(@RequestBody Map<String, Object> rawPayload) {
+    public ResponseEntity<NotificationResponse> sendNotification(
+            @RequestBody Map<String, Object> rawPayload) {
         log.info("📤 POST /send - Payload: {}", rawPayload);
+
         try {
+            // Extract all values from user input
             String channel = (String) rawPayload.getOrDefault("channel", "EMAIL");
             String recipient = (String) rawPayload.get("recipient");
             String message = (String) rawPayload.get("message");
             String priority = (String) rawPayload.getOrDefault("priority", "MEDIUM");
-            String notificationType = (String) rawPayload.getOrDefault("notificationType", "USERSIGNUP");
-            String subject = (String) rawPayload.get("subject");
-            String scheduledTimeStr = (String) rawPayload.get("scheduledTime");  // 🔥 Scheduling
+            String notificationType = (String) rawPayload.getOrDefault("notificationType", "GENERAL");
+            String subject = (String) rawPayload.getOrDefault("subject", "");
+            String scheduledTimeStr = (String) rawPayload.get("scheduledTime");
 
-            // Validate required
-            if (recipient == null || recipient.trim().isEmpty() || message == null || message.trim().isEmpty()) {
+            // ============================================================================
+            // VALIDATION
+            // ============================================================================
+            if (recipient == null || recipient.trim().isEmpty() ||
+                    message == null || message.trim().isEmpty()) {
+                log.warn("⚠️ Missing recipient or message field");
                 return ResponseEntity.badRequest()
-                        .body(NotificationResponse.builder().status("ERROR").message("Recipient & message required").build());
+                        .body(NotificationResponse.builder()
+                                .status("ERROR")
+                                .message("❌ Recipient and message are required")
+                                .build());
             }
 
-            // Channel logic
-            if ("SMS".equals(channel)) {
-                log.info("📱 SMS - recipient: {}", recipient);
-                subject = null;
-            } else if ("EMAIL".equals(channel) && (subject == null || subject.isEmpty())) {
-                subject = String.format("[%s] Notification", notificationType);
-            }
-
-            // 🔥 SCHEDULING LOGIC
-            LocalDateTime scheduledAt = null;
-            if (scheduledTimeStr != null && !scheduledTimeStr.isEmpty()) {
-                scheduledAt = LocalDateTime.parse(scheduledTimeStr);
-                log.info("⏰ Scheduled: {}", scheduledAt);
-            }
-
+            // ============================================================================
+            // BUILD REQUEST WITH USER'S CHANNEL & PRIORITY
+            // ============================================================================
             NotificationRequest request = NotificationRequest.builder()
                     .notificationType(notificationType)
                     .recipient(recipient.trim())
                     .message(message.trim())
                     .subject(subject)
-                    .scheduledTime(scheduledTimeStr)  // Pass to service/DB
+                    .channel(channel)              // ✨ User's choice - directly from input
+                    .priority(priority)            // ✨ User's choice - directly from input
+                    .scheduledTime(scheduledTimeStr)
                     .build();
 
-            // Service handles status (PENDING/SCHEDULED based on scheduledTime)
+            log.info("✅ Request built: channel={}, priority={}", channel, priority);
+
+            // ============================================================================
+            // SEND NOTIFICATION (SERVICE VALIDATES & PROCESSES)
+            // ============================================================================
             return ResponseEntity.ok(notificationService.sendNotification(request));
 
+        } catch (IllegalArgumentException e) {
+            log.warn("⚠️ Validation error: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(NotificationResponse.builder()
+                            .status("ERROR")
+                            .message(e.getMessage())
+                            .build());
         } catch (Exception e) {
             log.error("❌ /send error: {}", e.getMessage(), e);
-            if (e.getMessage().contains("Rule not found")) {
-                log.warn("⚠️ Rule bypassed");
-                return ResponseEntity.ok(NotificationResponse.builder()
-                        .status("QUEUED")
-                        .message("Queued (rule bypassed)")
-                        .build());
-            }
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(NotificationResponse.builder().status("ERROR").message(e.getMessage()).build());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(NotificationResponse.builder()
+                            .status("ERROR")
+                            .message("Server error: " + e.getMessage())
+                            .build());
         }
     }
 
-    // ALL OTHER ENDPOINTS UNCHANGED
+    // ============================================================================
+    // GET EVENT STATUS
+    // ============================================================================
+
     @GetMapping("/status/{eventId}")
     public ResponseEntity<NotificationEvent> getStatus(@PathVariable Long eventId) {
         log.info("📊 GET /status/{}", eventId);
@@ -94,6 +107,10 @@ public class NotificationController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
     }
+
+    // ============================================================================
+    // GET ALL EVENTS HISTORY
+    // ============================================================================
 
     @GetMapping("/history")
     public ResponseEntity<List<NotificationEvent>> getHistory() {
@@ -107,6 +124,10 @@ public class NotificationController {
         }
     }
 
+    // ============================================================================
+    // FILTER BY STATUS
+    // ============================================================================
+
     @GetMapping("/status-filter/{status}")
     public ResponseEntity<List<NotificationEvent>> getByStatus(@PathVariable String status) {
         log.info("🔍 GET /status-filter/{}", status);
@@ -114,9 +135,14 @@ public class NotificationController {
             List<NotificationEvent> events = notificationService.getEventsByStatus(status);
             return ResponseEntity.ok(events);
         } catch (Exception e) {
+            log.error("❌ /status-filter error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    // ============================================================================
+    // FILTER BY PRIORITY
+    // ============================================================================
 
     @GetMapping("/priority-filter/{priority}")
     public ResponseEntity<List<NotificationEvent>> getByPriority(@PathVariable String priority) {
@@ -125,9 +151,14 @@ public class NotificationController {
             List<NotificationEvent> events = notificationService.getEventsByPriority(priority);
             return ResponseEntity.ok(events);
         } catch (Exception e) {
+            log.error("❌ /priority-filter error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    // ============================================================================
+    // FILTER BY CHANNEL
+    // ============================================================================
 
     @GetMapping("/channel-filter/{channel}")
     public ResponseEntity<List<NotificationEvent>> getByChannel(@PathVariable String channel) {
@@ -136,9 +167,14 @@ public class NotificationController {
             List<NotificationEvent> events = notificationService.getEventsByChannel(channel);
             return ResponseEntity.ok(events);
         } catch (Exception e) {
+            log.error("❌ /channel-filter error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+
+    // ============================================================================
+    // COMBINED FILTERING
+    // ============================================================================
 
     @GetMapping("/filter")
     public ResponseEntity<List<NotificationEvent>> getFilteredEvents(
@@ -151,12 +187,58 @@ public class NotificationController {
             List<NotificationEvent> events = notificationService.getFilteredEvents(status, priority, channel, dateRange);
             return ResponseEntity.ok(events);
         } catch (Exception e) {
+            log.error("❌ /filter error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
+    // ============================================================================
+    // HEALTH CHECK
+    // ============================================================================
+
     @GetMapping("/health")
-    public ResponseEntity<String> health() {
-        return ResponseEntity.ok("✅ SMS + SCHEDULING FIXED!");
+    public ResponseEntity<Map<String, Object>> health() {
+        log.info("❤️ Health check requested");
+        Map<String, Object> healthInfo = new java.util.HashMap<>();
+        healthInfo.put("status", "✅ RUNNING");
+        healthInfo.put("service", "Notification Orchestration Service");
+        healthInfo.put("mode", "Direct User Input (Channel & Priority)");
+        healthInfo.put("supportedChannels", new String[]{"EMAIL", "SMS", "PUSH"});
+        healthInfo.put("supportedPriorities", new String[]{"LOW", "MEDIUM", "HIGH", "CRITICAL"});
+        healthInfo.put("timestamp", LocalDateTime.now());
+        return ResponseEntity.ok(healthInfo);
+    }
+
+    // ============================================================================
+    // OPTIONAL: TEST ENDPOINT (Helps verify all channels work)
+    // ============================================================================
+
+    @PostMapping("/test-payload")
+    public ResponseEntity<NotificationResponse> testPayload(
+            @RequestBody(required = false) Map<String, Object> rawPayload) {
+        log.info("🧪 TEST endpoint - Payload: {}", rawPayload);
+
+        if (rawPayload == null || rawPayload.isEmpty()) {
+            return ResponseEntity.ok(NotificationResponse.builder()
+                    .status("INFO")
+                    .message("""
+                            ✅ Test Payload Example (copy & modify):
+                            {
+                              "channel": "PUSH",
+                              "priority": "CRITICAL",
+                              "recipient": "YOUR_FCM_TOKEN",
+                              "message": "Test message from your app",
+                              "notificationType": "TEST_EVENT",
+                              "subject": "Test Subject"
+                            }
+                            
+                            Channels: EMAIL, SMS, PUSH
+                            Priorities: LOW, MEDIUM, HIGH, CRITICAL
+                            """)
+                    .build());
+        }
+
+        // If payload provided, treat as normal send
+        return sendNotification(rawPayload);
     }
 }

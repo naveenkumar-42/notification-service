@@ -34,6 +34,15 @@ public class NotificationProducer {
                     returnedMessage.getReplyText());
         });
     }
+    public void sendToDLQ(NotificationEvent event) {
+        try {
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE, RabbitMQConfig.DLQ_ROUTING_KEY, event);
+            log.warn("📤 Event sent to DLQ: {}", event.getId());
+        } catch (Exception e) {
+            log.error("❌ Failed to send to DLQ: {}", e.getMessage());
+        }
+    }
+
 
     // Send notification to main queue
     public void sendNotification(NotificationEvent event) {

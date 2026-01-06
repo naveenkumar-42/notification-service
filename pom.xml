@@ -63,6 +63,11 @@
 			<artifactId>mariadb-java-client</artifactId>
 		</dependency>
 
+		<dependency>
+			<groupId>com.google.firebase</groupId>
+			<artifactId>firebase-admin</artifactId>
+			<version>9.3.0</version> <!-- Latest stable -->
+		</dependency>
 
 		<dependency>
 			<groupId>org.projectlombok</groupId>

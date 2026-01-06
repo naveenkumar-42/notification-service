@@ -1,6 +1,7 @@
 package com.notification.service.sender;
 
 import lombok.Data;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,10 @@ public class SenderConfig {
         private String fromNumber = "";
     }
 
+
+    @Autowired
+    private SenderConfig senderConfig;
+
     // EMAIL convenience getters
     public String getEmailFromAddress() { return email.getFromAddress(); }
     public String getEmailReplyTo() { return email.getReplyTo() != null ? email.getReplyTo() : email.getFromAddress(); }
@@ -56,4 +61,9 @@ public class SenderConfig {
     public String getTwilioAccountSid() { return sms.getAccountSid(); }
     public String getTwilioAuthToken() { return sms.getAuthToken(); }
     public String getTwilioPhoneNumber() { return sms.getFromNumber(); }
+
+
+    // PUSH Config (NEW)
+    private boolean pushEnabled = true;
+    private String pushServiceAccountPath = "classpath:firebase-service-account.json";
 }
