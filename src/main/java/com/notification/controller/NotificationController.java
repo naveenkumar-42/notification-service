@@ -23,7 +23,7 @@ public class NotificationController {
     @Autowired
     private NotificationService notificationService;
 
-    // 🔥 SMS FIXED - NO NEW DEPENDENCIES
+    // 🔥 SMS + SCHEDULING FIXED
     @PostMapping("/send")
     public ResponseEntity<NotificationResponse> sendNotification(@RequestBody Map<String, Object> rawPayload) {
         log.info("📤 POST /send - Payload: {}", rawPayload);
@@ -34,52 +34,55 @@ public class NotificationController {
             String priority = (String) rawPayload.getOrDefault("priority", "MEDIUM");
             String notificationType = (String) rawPayload.getOrDefault("notificationType", "USERSIGNUP");
             String subject = (String) rawPayload.get("subject");
+            String scheduledTimeStr = (String) rawPayload.get("scheduledTime");  // 🔥 Scheduling
 
+            // Validate required
             if (recipient == null || recipient.trim().isEmpty() || message == null || message.trim().isEmpty()) {
                 return ResponseEntity.badRequest()
                         .body(NotificationResponse.builder().status("ERROR").message("Recipient & message required").build());
             }
 
-            // SMS: Ignore subject
+            // Channel logic
             if ("SMS".equals(channel)) {
-                log.info("📱 SMS OK - recipient: {}", recipient);
+                log.info("📱 SMS - recipient: {}", recipient);
                 subject = null;
             } else if ("EMAIL".equals(channel) && (subject == null || subject.isEmpty())) {
                 subject = String.format("[%s] Notification", notificationType);
             }
 
-            // Create DTO & try service
+            // 🔥 SCHEDULING LOGIC
+            LocalDateTime scheduledAt = null;
+            if (scheduledTimeStr != null && !scheduledTimeStr.isEmpty()) {
+                scheduledAt = LocalDateTime.parse(scheduledTimeStr);
+                log.info("⏰ Scheduled: {}", scheduledAt);
+            }
+
             NotificationRequest request = NotificationRequest.builder()
                     .notificationType(notificationType)
                     .recipient(recipient.trim())
                     .message(message.trim())
                     .subject(subject)
+                    .scheduledTime(scheduledTimeStr)  // Pass to service/DB
                     .build();
 
-            // TRY SERVICE FIRST (for rule lookup)
+            // Service handles status (PENDING/SCHEDULED based on scheduledTime)
             return ResponseEntity.ok(notificationService.sendNotification(request));
 
         } catch (Exception e) {
             log.error("❌ /send error: {}", e.getMessage(), e);
-
-            // Graceful fallback for "Rule not found"
             if (e.getMessage().contains("Rule not found")) {
-                log.warn("⚠️ Bypassing rule lookup...");
+                log.warn("⚠️ Rule bypassed");
                 return ResponseEntity.ok(NotificationResponse.builder()
                         .status("QUEUED")
                         .message("Queued (rule bypassed)")
                         .build());
             }
-
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(NotificationResponse.builder()
-                            .status("ERROR")
-                            .message(e.getMessage())
-                            .build());
+                    .body(NotificationResponse.builder().status("ERROR").message(e.getMessage()).build());
         }
     }
 
-    // Copy ALL your existing endpoints below (unchanged)...
+    // ALL OTHER ENDPOINTS UNCHANGED
     @GetMapping("/status/{eventId}")
     public ResponseEntity<NotificationEvent> getStatus(@PathVariable Long eventId) {
         log.info("📊 GET /status/{}", eventId);
@@ -154,6 +157,6 @@ public class NotificationController {
 
     @GetMapping("/health")
     public ResponseEntity<String> health() {
-        return ResponseEntity.ok("✅ SMS & EMAIL FIXED - No compilation errors!");
+        return ResponseEntity.ok("✅ SMS + SCHEDULING FIXED!");
     }
 }
