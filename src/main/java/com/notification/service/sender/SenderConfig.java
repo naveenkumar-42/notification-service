@@ -1,7 +1,6 @@
 package com.notification.service.sender;
 
 import lombok.Data;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -40,10 +39,6 @@ public class SenderConfig {
         private String authToken = "";
         private String fromNumber = "";
     }
-
-
-    @Autowired
-    private SenderConfig senderConfig;
 
     // EMAIL convenience getters
     public String getEmailFromAddress() { return email.getFromAddress(); }
